@@ -1,0 +1,243 @@
+2등 코드리뷰
+
+요약
+240만 건(Train), 60만 건(Test)
+[Import] -> [데이터 준비] -> [데이터 전처리] -> [특성 엔지니어링] -> [앙상블 모델링] -> [최종 예측]
+흥미로운점 : train, test 전처리 후 파일저장할 때 항상 최적화 진행(int64 -> int32로 변경, float64 -> float 32로 변경) (메모리 줄이기 위함)
+전처리 과정이 전체 과정의 97%를 차지하고, 
+데이터 불균형(Class Weight/Oversampling)을 해결하려고 노력했다는 점"과 "300개의 중요 변수를 선별하여 효율성을 높였다는 점
+
+서론
+① 데이터 로드 및 개별 전처리 : 회원, 신용, 매출, 청구 등 8개의 분산된 데이터를 각각 정제 : 전체코드의 97% 차지
+결측치 처리, 데이터 타입 변환(문자열→숫자), 불필요 변수 제거
+② 데이터 통합
+concat 및 merge를 통한 마스터 데이터셋 생성
+고객 ID를 기준으로 분산된 8개의 정보를 하나로 합쳐 모델이 학습할 수 있는 단일 데이터프레임을 구축
+③ 특성 엔지니어링 및 변수 선택
+클래스 가중치 계산, XGBoost를 이용한 중요 변수 300개 추출
+데이터 불균형 문제를 해결하기 위해 클래스 가중치(Class Weight)를 부여했고, 연산 효율성을 위해 수백 개의 변수 중 영향력이 높은 상위 300개 변수만 선별하여 모델의 복잡도를 줄임
+④ 모델 학습 - 3대 알고리즘 활용
+XGBoost, LightGBM, CatBoost 모델 사용
+Oversampling: 소수 클래스 데이터를 보강하여 학습 성능 향상.
+Diversity: 서로 다른 특성을 가진 세 가지 모델을 사용하여 예측의 다양성을 확보.
+GPU 활용: 대규모 데이터(240만 건) 처리를 위해 GPU 환경에서 가속 학습 진행.
+⑤ 최종 예측 및 앙상블
+Soft Voting 및 ID별 Mode Aggregation
+Soft Voting: 각 모델의 예측 확률값을 평균 내어 최종 결정을 내림으로써 단일 모델보다 안정적인 성능 구현
+Aggregation: 한 고객(ID)에 대해 여러 기록이 있을 경우, 최빈값(Mode) 등을 활용해 고객 단위의 최종 결과 도출
+②~⑤ : 다 합해서 전체 코드의 3% 차지
+
+
+본론
+1. Import
+2. 데이터 로드 및 전처리 - train data
+
+1) 회원정보
+customer_train_df 생성
+customer_train_df is created with shape: (2,400,000, 78)
+전처리
+1) 결측치 처리
+2) 자료형 변환
+3) 상관관계 분석
+4) 변수 별로 확인
+파일저장
+
+2) 신용정보
+credit_train_df 생성
+credit_train_df is created with shape: (2400000, 42)
+전처리
+파일저장
+
+3) 승인매출정보
+sales_train_df 생성
+sales_train_df is created with shape: (2400000, 406)
+전처리
+1] 결측치 처리
+2] 자료형 변환
+3] 상관관계 분석
+4] 변수 별로 데이터 살펴보기 (sales_with_seg)
+1) BOM 변수
+2) R12M 변수
+3) R6M 변수
+4) R3M 변수
+5) 쇼핑/교통/여유/납부
+6) R12M 할부건수/할부금액
+7) RP 관련 변수들
+8) 카드론 관련 변수들
+9) 이용개월수/이용금액/이용건수 - 온라인/오프라인
+10) 이용개월수/이용금액/이용건수 - 페이_온라인/오프라인
+11) 이용개월수/이용금액/이용건수 - 간편결제/당사페이/당사기타/A,B,C,D 페이
+12) R6M
+13) R3M
+14) B0M
+15) 선결제
+16) 연체
+17) 입금원금 관련 변수
+18) 건수 관련 변수 등
+파일저장
+
+4) 청구입금정보
+billing_train_df 생성
+billing_train_df is created with shape: (2400000, 46)
+전처리
+파일저장
+
+5) 잔액정보
+balance_train_df 생성
+balance_train_df is created with shape: (2400000, 82)
+
+6) 채널정보
+channel_train_df 생성
+channel_train_df is created with shape: (2400000, 105)
+전처리
+1) 결측치처리
+2) 문자열 인코딩
+파일저장
+
+7) 마케팅정보
+marketing_train_df 생성
+marketing_train_df is created with shape: (2400000, 64)
+전처리
+1) 문자열 인코딩
+2) 모두 0이므로 삭제
+파일저장
+
+8) 성과정보
+performance_train_df 생성
+performance_train_df is created with shape: (2400000, 49)
+전처리 : 결측치를 중앙값으로 대체
+파일저장
+
+3. 데이터 로드 및 전처리(2) - test data
+
+1) 회원정보
+customer_test_df 생성
+customer_test_df is created with shape: (600,000, 77)
+전처리
+1) 결측치 처리
+2) 자료형 변환
+3) 상관관계 분석
+4) 변수별로 확인
+파일저장
+
+2) 신용정보
+credit_test_df 생성
+credit_test_df is created with shape: (600000, 42)
+전처리
+1) 결측치 처리
+2) 자료형 변환
+3) 상관관계 분석
+4) 변수별로 데이터 살펴보기
+파일저장
+
+3) 승인매출정보
+sales_test_df 생성
+sales_test_df is created with shape: (600000, 406)
+전처리
+1) 결측치 처리
+- '_n순위@@업종' 변수 - AB
+- 결측치 80% 이상인 최종카드론 관련 변수들
+2) 자료형 변환
+3) 상관관계 분석
+4) 변수별로 데이터 살펴보기
+1] B0M 변수
+2] R12M 변수
+3] R6M 변수
+4] R3M 변수
+5] 쇼핑/교통/여유/납부
+6] R12M 할부건수/할부금액
+7] RP 관련 변수들
+8] 카드론 관련 변수들
+9] 이용개월수/이용금액/이용건수-온라인/오프라인
+10] 이용개월수/이용금액/이용건수 - 페이_온라인/오프라인
+11] 이용개월수/이용금액/이용건수 - 간편결제/당사페이/당사기타/A,B,C,D 페이
+12] R6M
+13] R3M
+14] B0M
+15] 선결제
+16] 연체
+17] 입금원금 관련 변수
+18] 건수 관련 변수 등
+파일 저장: sales_test_cleaned (600000, 523)
+
+4) 청구입금정보
+billing_test_df 생성
+billing_test_df is created with shape: (600000, 46)
+전처리 (test 데이터에 대해 train과 동일한 방법 적용)
+파일저장
+
+5) 잔액정보
+balance_test_df 생성
+balance_test_df is created with shape: (600000, 82)
+전처리 (test 데이터에 대해 train과 동일한 방법 적용)
+파일저장
+
+6) 채널정보
+channel_test_df 생성
+channel_test_df is created with shape: (600000, 105)
+전처리 (test 데이터에 대해 train과 동일한 방법 적용)
+파일저장
+
+7) 마케팅정보
+marketing_test_df 생성
+marketing_test_df is created with shape: (600000, 64)
+전처리 (test 데이터에 대해 train과 동일한 방법 적용)
+파일저장
+
+8) 성과정보
+performance_test_df 생성
+performance_test_df is created with shape: (600000, 49)
+전처리 (test 데이터에 대해 train과 동일한 방법 적용)
+파일저장
+
+4. 데이터 전처리(3) - concat & merge
+
+5. 모델링(1) - 특성 엔지니어링
+1) 클래스 가중치 계산
+2) 각 샘플에 대해 가중치 매핑
+3) 전체 feature로 XGBoost 학습
+4) XGBoost 기준 중요도 상위 300개 변수 추출
+
+6. 모델링(2) - final model train
+1) XGBoost 모델 학습
+1] 변수 300개 사용
+2] 오버샘플링
+3] 클래스별 weight 계산
+4] 모델 학습 (검증 없이 전체 데이터 사용)
+
+2) LightGBM 모델 학습
+1) LightGBM을 위한 GPU driver 설치 코드
+2) 변수 300개 사용
+3) 오버샘플링
+4) 클래스별 weight 계산
+5) 모델 학습 (검증 없이 전체 데이터 사용)
+
+3) CatBoost 모델 학습
+1) Catboost 설치
+2) 변수 300개 사용
+3) 오버샘플링
+4) 클래스별 weight 계산
+5) 모델학습
+
+7. 모델예측 - Soft voting
+1) LightGMB을 위한 GPU driver 설치코드
+2) catboost 설치
+3) 변수 300개 사용
+4) 학습한 모델들 불러오기
+5) test 데이터 준비
+6) XGB predict_proba
+7) LGB Booster
+8) CAT predict_proba
+9) soft voting
+10) 예측값 test_df에 추가
+11) ID별 mode aggregation
+12) 컬럼명 정리
+13) 저장
+
+
+
+결론
+1.  train, test 전처리 후 파일저장할 때 항상 최적화 진행하는 코드를 사용하면 좋을 것 같습니다.
+2. 승인매출정보를 전처리하는 과정을 5등 데이터에 넣으면 좋을 것 같습니다.
+test : (2400000, 406), train : (600000, 406)
+3. 개별 전처리를 하면 램의 부담이 줄어들 것으로 판단됩니다.
