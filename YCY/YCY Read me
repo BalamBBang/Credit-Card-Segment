@@ -1,11 +1,60 @@
-this file belongs to YCY
+# 📊 Financial Data Analysis: Feature Engineering Strategy
+> **Project Scope:** Credit Card User Classification & Modeling  
+> **My Role:** Winner Code Review & Derived Variable Design  
+> **Key Focus:** Imbalanced Data Handling (Separating Class A/B)
 
+<br>
 
-2nd 코드리뷰 발표부분 -> 발표할 부분 코드 예시 몇가지 가져온것.
+## 💡 Overview
+본 프로젝트는 **금융 데이터의 클래스 불균형(Imbalanced Data)** 문제를 해결하고, 특히 데이터가 적은 우량 등급(A, B)을 명확히 식별하는 것을 목표로 했습니다.
 
-Main코드에 넣을 9가지 변수 -> 변수 9개 추가하는 코드만 가져온것.
-Feature_Engineering1 -> 9개변수 도출 과정 및 통계
+저는 **2등 수상자의 코드를 분석**하여 인사이트를 도출하고, 이를 바탕으로 A/B 등급과 하위 등급(C/D/E)을 효과적으로 분리하는 **3가지 핵심 파생변수**를 설계했습니다.
 
-내가만든 파생변수(발표) -> 발표에 넣을부분 파생변수(3개) 코드만 따로
+<br>
 
-발표순서 -> 발표순서 및 내용 간략정리
+## 🔍 Part 1. Winner Code Review (Insight)
+기존 우수 모델(수상자 코드)을 분석하며 우리 데이터에 적용할 수 있는 3가지 주요 피처 엔지니어링 전략을 수립했습니다.
+
+| Strategy | Description | Key Insight |
+| :--- | :--- | :--- |
+| **Binarization** | 복잡한 수치형 변수의 이진화 (0/1) | '이용 경험 유무'가 중요한 변수(카드론 등)의 노이즈 제거 |
+| **Mapping** | 횟수/빈도 데이터 매핑 | 단순 이진화가 아닌 '빈도' 자체가 중요한 변수는 그대로 보존 |
+| **Scoring** | 업종별/금액별 가점 부여 | 우량 등급(A/B)이 주로 이용하는 업종과 금액대에 가중치 부여 |
+
+<br>
+
+## 🛠️ Part 2. My Contribution: Derived Variables
+수상자 코드 분석을 통해 얻은 인사이트를 바탕으로, **A/B 등급의 고유 패턴**을 타겟팅한 3가지 파생변수를 직접 설계했습니다.
+
+### 1️⃣ 우량 후보 여부 (Prime Candidate Status)
+> **Goal:** 하위 등급(C/D/E)의 1차 필터링
+
+* **Observation:** 등급별 한도 통계 분석 결과, C/D/E 등급의 한도 최소값은 `0`인 반면, A/B 등급은 약 `50,000` 이상에서 시작함.
+* **Logic:** 최소 한도 **5만 원**을 기준선(Threshold)으로 설정하여 이진화.
+* **Result:** 5만 원 미만 데이터를 0으로 처리하여 하위 등급의 상당수를 사전에 필터링 성공.
+
+### 2️⃣ 실질 여유 한도 (Real Available Limit)
+> **Goal:** A등급(최상위)과 B등급의 행동 패턴 구분
+
+* **Hypothesis:** A와 B 모두 한도는 높지만, **B등급은 A등급보다 한도 소진율이 상대적으로 높다(한도를 꽉 채워 씀)**는 점에 착안.
+* **Formula:**
+    $$\text{Real Available Limit} = \text{Limit} \times (1 - \text{Utilization Rate})$$
+* **Effect:** 한도가 크고 소진율이 낮은 A등급의 점수는 극대화하고, 소진율이 높은 B등급의 점수는 낮추어 두 그룹 간의 격차를 벌림.
+
+### 3️⃣ 한도 대비 소비 성향 (Limit Consumption Propensity)
+> **Goal:** 데이터 특이값(Inf)을 활용한 강력한 하위 등급 분류
+
+* **Formula:**
+    $$\text{Propensity} = \frac{\text{Utilization Rate}}{\log(\text{Limit})}$$
+* **Discovery:**
+    * C/D/E 등급 중 한도가 `0`인 데이터 존재 → $\log(0)$ 연산 시 분모가 0이 됨.
+    * 결과적으로 **무한대(`inf`)** 값이 발생.
+* **Strategy:** `inf` 값을 결측치로 제거하지 않고, 오히려 **하위 등급을 식별하는 강력한 시그널(Signature)**로 역이용하여 분류 성능 향상.
+
+<br>
+
+## 💭 Retrospective
+* **The Curse of Knowledge:** 수상자의 우수한 코드를 먼저 리뷰하다 보니, 그 논리에 사고가 갇히는 듯한 어려움(지식의 저주)을 겪기도 했습니다.
+* **Growth:** 하지만 모방을 넘어 데이터의 분포(Distribution)와 통계적 특성(Min, Inf)을 뜯어보며 저만의 논리를 세우는 과정에서 피처 엔지니어링의 본질을 배울 수 있었습니다. 향후 다른 도메인의 데이터를 다룰 때에도 이번에 얻은 '데이터를 바라보는 관점'이 큰 자산이 될 것입니다.
+
+---
